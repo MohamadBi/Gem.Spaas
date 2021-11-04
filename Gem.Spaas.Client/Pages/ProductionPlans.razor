@@ -1,0 +1,118 @@
+﻿@page "/productionPlans"
+@using Gem.Spaas.Shared.ProductionPlanComponent.Dto
+@using System.Net.Http.Json
+@using System.Text
+@using System.Threading
+@using System.Text.Json
+@inject IJSRuntime jsRuntime;
+@using WebSocketSharp;
+
+<h2>Production Plan Details</h2>
+
+@if (webSocketMessage == null)
+{
+    <p>Waiting for a plan generation...</p>
+}
+else
+{
+    <h3>Request info:</h3>
+    <div class="card-body bg-white">
+        <div class="form-group row">
+            <label class="col-sm-2 col-form-label"> Load: </label>
+            <div class="col-sm-10">
+                <label class="form-control">@webSocketMessage.Load </label>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label class="col-sm-2 col-form-label">Fuels: </label>
+            <div class="col-sm-2">
+                <label class="form-control">Gas: @webSocketMessage.Fuels.GasCostEuroMWh</label>
+            </div>
+            <div class="col-sm-2">
+                <label class="form-control">Wind: @webSocketMessage.Fuels.WindPercentage</label>
+            </div>
+            <div class="col-sm-2">
+                <label class="form-control">Kerosine: @webSocketMessage.Fuels.KerosineCostEuroMWh</label>
+            </div>
+            <div class="col-sm-2">
+                <label class="form-control">Co2: @webSocketMessage.Fuels.Co2EuroTon</label>
+            </div>
+        </div>
+        <table class='table'>
+
+            <thead>
+                <tr>
+                    <th>Power Plant Name</th>
+                    <th>Fuel</th>
+                    <th>Effecincy</th>
+                    <th>Power Max</th>
+                    <th>Power Min</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var plant in webSocketMessage.PowerPlants)
+                {
+                    <tr>
+                        <td>@plant.Name</td>
+                        <td>@plant.Type</td>
+                        <td>@plant.Efficiency</td>
+                        <td>@plant.PowerMax</td>
+                        <td>@plant.PowerMin</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <h3>Generated plan:</h3>
+    <table class='table'>
+        <thead>
+            <tr>
+                <th>Power Plant</th>
+                <th>Power</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var plan in webSocketMessage.ProductionPlanItemDtos)
+            {
+                <tr>
+                    <td>@plan.Name</td>
+                    <td>@plan.Power</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code
+{
+    private WebSocket webSocket = new WebSocket("ws://localhost:5555/pp");
+    private WebSocketMessageDto webSocketMessage;
+
+    protected override void OnInitialized()
+    {
+        try
+        {
+            ConnectToWebSocketServer();
+        }
+        catch (Exception ex)
+        {
+            jsRuntime.InvokeVoidAsync("alert", $"Error calling web socket backend : {ex.Message}").GetAwaiter().GetResult();
+        }
+    }
+
+    private void ConnectToWebSocketServer()
+    {
+        webSocket.OnMessage += OnMesseageHandler;
+        webSocket.Connect();
+    }
+
+    private void OnMesseageHandler(object sender, MessageEventArgs e)
+    {
+        if (!string.IsNullOrEmpty(e.Data))
+        {
+            webSocketMessage = JsonSerializer.Deserialize<WebSocketMessageDto>(e.Data, new JsonSerializerOptions { PropertyNameCaseInsensitive = false });
+            this.InvokeAsync(() => this.StateHasChanged());
+        }
+    }
+}  
